@@ -92,6 +92,7 @@ export const EXTENSION_MAP: Record<string, Language> = {
   '.scala': 'scala',
   '.sc': 'scala',
   '.lua': 'lua',
+  '.lua.txt': 'lua',
   '.luau': 'luau',
   '.m': 'objc',
   '.mm': 'objc',
@@ -104,6 +105,13 @@ export const EXTENSION_MAP: Record<string, Language> = {
   '.properties': 'properties',
 };
 
+const SUPPORTED_EXTENSIONS = Object.keys(EXTENSION_MAP).sort((a, b) => b.length - a.length);
+
+function getSupportedExtension(filePath: string): string | null {
+  const lowerPath = filePath.toLowerCase();
+  return SUPPORTED_EXTENSIONS.find((ext) => lowerPath.endsWith(ext)) ?? null;
+}
+
 /**
  * Whether a file is one CodeGraph can parse, based purely on its extension.
  * This is the single source of truth for "should we index this file" — derived
@@ -111,9 +119,7 @@ export const EXTENSION_MAP: Record<string, Language> = {
  */
 export function isSourceFile(filePath: string): boolean {
   if (isPlayRoutesFile(filePath)) return true; // Play `conf/routes` is extensionless
-  const dot = filePath.lastIndexOf('.');
-  if (dot < 0) return false;
-  return filePath.slice(dot).toLowerCase() in EXTENSION_MAP;
+  return getSupportedExtension(filePath) !== null;
 }
 
 /**
@@ -235,8 +241,8 @@ export function detectLanguage(filePath: string, source?: string): Language {
   // Play `conf/routes` has no grammar — route through the no-symbol path; the
   // Play framework resolver extracts route nodes from it.
   if (isPlayRoutesFile(filePath)) return 'yaml';
-  const ext = filePath.substring(filePath.lastIndexOf('.')).toLowerCase();
-  const lang = EXTENSION_MAP[ext] || 'unknown';
+  const ext = getSupportedExtension(filePath);
+  const lang = ext ? EXTENSION_MAP[ext]! : 'unknown';
 
   // .h files could be C, C++, or Objective-C — check source content
   if (lang === 'c' && ext === '.h' && source) {

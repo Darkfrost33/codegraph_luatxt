@@ -1979,7 +1979,7 @@ export class ToolHandler {
       // names (Class.method / Class::method) — the agent's most precise input,
       // resolved exactly by findAllSymbols. (The old strip mangled Class.method
       // into Class, throwing the method away.)
-      const FILE_EXT = /\.(?:java|kt|kts|ts|tsx|js|jsx|mjs|cjs|cs|py|go|rb|php|swift|rs|cpp|cc|cxx|c|h|hpp|scala|lua|dart|vue|svelte)$/i;
+      const FILE_EXT = /\.(?:java|kt|kts|ts|tsx|js|jsx|mjs|cjs|cs|py|go|rb|php|swift|rs|cpp|cc|cxx|c|h|hpp|scala|lua\.txt|lua|luau|dart|vue|svelte)$/i;
       const tokens = [...new Set(
         query.split(/[\s,()[\]]+/)
           .map((t) => t.replace(FILE_EXT, '').trim())

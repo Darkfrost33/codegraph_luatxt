@@ -375,6 +375,7 @@ describe('Source file detection (isSourceFile)', () => {
     expect(isSourceFile('src/component.tsx')).toBe(true);
     expect(isSourceFile('lib/util.js')).toBe(true);
     expect(isSourceFile('src/main.py')).toBe(true);
+    expect(isSourceFile('src/init.lua.txt')).toBe(true);
   });
 
   it('rejects unsupported extensions and extensionless files', () => {
