@@ -37,13 +37,13 @@ of calls; a grep/read exploration is dozens.
 ## Tool selection by intent
 
 - **"What is the symbol named X?"** → \`codegraph_search\`
-- **"What's the deal with this task / feature / area?"** → \`codegraph_context\` (PRIMARY — composes search + node + callers + callees in one call)
+- **"What's the deal with this task / feature / area?"** → \`codegraph_context\` (PRIMARY — pass the user's full question as \`task\`; \`query\` is an alias)
 - **"How does X reach/become Y? / trace the flow / the path from X to Y"** → \`codegraph_trace\` (ONE call returns the whole call path, including dynamic-dispatch hops — callbacks, React re-render, JSX children — that grep can't follow)
 - **"What calls this?"** → \`codegraph_callers\`
 - **"What does this call?"** → \`codegraph_callees\`
 - **"What would changing this break?"** → \`codegraph_impact\`
 - **"Show me this symbol's source / signature / docstring."** → \`codegraph_node\`
-- **"Show me several related symbols' source / survey an area."** → \`codegraph_explore\` (ONE capped call; prefer over many codegraph_node/Read)
+- **"Show me several related symbols' source / survey an area."** → \`codegraph_explore\` (ONE capped call; \`query\` = space-separated symbol/file names, not a question)
 - **"What's in directory X?"** → \`codegraph_files\`
 - **"Is the index ready / what's its size?"** → \`codegraph_status\`
 
@@ -56,6 +56,7 @@ of calls; a grep/read exploration is dozens.
 
 ## Anti-patterns
 
+- **Don't call \`codegraph_context\` with empty input.** Pass the user's question verbatim in \`task\` (中文 + English symbols/paths OK). Space-separated keywords alone are weak — prepend the user's intent or use \`codegraph_search\` per symbol.
 - **Trust codegraph's results — don't re-verify them with grep.** They come from a full AST parse; re-checking with grep is slower, less accurate, and wastes context.
 - **Don't grep first** when looking up a symbol by name — \`codegraph_search\` is faster and returns kind + location + signature.
 - **Don't chain \`codegraph_search\` + \`codegraph_node\`** when you just want context — \`codegraph_context\` is one round-trip.

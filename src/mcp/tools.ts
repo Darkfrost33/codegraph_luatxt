@@ -449,7 +449,11 @@ export const tools: ToolDefinition[] = [
       properties: {
         task: {
           type: 'string',
-          description: 'Description of the task, bug, or feature to build context for',
+          description: 'User question or task in natural language (中文 OK). Include symbol/path names. Required unless query is set.',
+        },
+        query: {
+          type: 'string',
+          description: 'Alias for task — same meaning; use when the client sends query instead of task.',
         },
         maxNodes: {
           type: 'number',
@@ -554,7 +558,7 @@ export const tools: ToolDefinition[] = [
       properties: {
         query: {
           type: 'string',
-          description: 'Symbol names, file names, or short code terms to explore (e.g., "AuthService loginUser session-manager", "GraphTraverser BFS impact traversal.ts"). Use codegraph_search first to find relevant names.',
+          description: 'Space-separated symbol/file names to explore (e.g., "WaveFlag ShopMenu SetActive"). Not a natural-language question — use codegraph_context for that. Agents may also pass the same string as `task`, or a `symbols` string[] (joined automatically).',
         },
         maxFiles: {
           type: 'number',
@@ -926,6 +930,26 @@ export class ToolHandler {
   }
 
   /**
+   * Resolve the explore search bag from several shapes agents/clients send.
+   * Canonical param is `query` (space-separated names). Some agents pass
+   * `symbols` as a string[] or `task` instead — accept those too.
+   */
+  private resolveExploreQuery(args: Record<string, unknown>): string | ToolResult {
+    const direct = args.query ?? args.task;
+    if (direct !== undefined && direct !== null) {
+      return this.validateString(direct, 'query');
+    }
+    if (Array.isArray(args.symbols)) {
+      const parts = args.symbols.filter((s): s is string => typeof s === 'string' && s.length > 0);
+      return this.validateString(parts.join(' '), 'query');
+    }
+    if (typeof args.symbols === 'string') {
+      return this.validateString(args.symbols, 'query');
+    }
+    return this.validateString(undefined, 'query');
+  }
+
+  /**
    * Cached git worktree/index mismatch for a tool call's effective project.
    *
    * The "effective project" is what the request targets: an explicit
@@ -1168,7 +1192,8 @@ export class ToolHandler {
    * Handle codegraph_context
    */
   private async handleContext(args: Record<string, unknown>): Promise<ToolResult> {
-    const task = this.validateString(args.task, 'task');
+    // Some MCP clients (e.g. Cursor shortcuts) send `query` instead of `task`.
+    const task = this.validateString(args.task ?? args.query, 'task');
     if (typeof task !== 'string') return task;
 
     // Mark session as consulted (enables Grep/Glob/Bash)
@@ -2121,7 +2146,7 @@ export class ToolHandler {
    * tax on small projects while earning its keep on large ones.
    */
   private async handleExplore(args: Record<string, unknown>): Promise<ToolResult> {
-    const query = this.validateString(args.query, 'query');
+    const query = this.resolveExploreQuery(args);
     if (typeof query !== 'string') return query;
 
     const cg = this.getCodeGraph(args.projectPath as string | undefined);

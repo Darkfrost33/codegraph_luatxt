@@ -269,6 +269,20 @@ describe('MCP Input Validation', () => {
     expect(result.content[0].text).toContain('non-empty string');
   });
 
+  it('should accept query as alias for task in codegraph_context', async () => {
+    const result = await handler.execute('codegraph_context', {
+      query: 'HeroChestBundle duration time limited',
+    });
+    expect(result.isError).toBeFalsy();
+  });
+
+  it('should accept symbols array as alias for query in codegraph_explore', async () => {
+    const result = await handler.execute('codegraph_explore', {
+      symbols: ['WaveFlag', 'WildCastle/Game/Assets/Scripts/UI/Widgets/WaveFlag.lua.txt'],
+    });
+    expect(result.isError).toBeFalsy();
+  });
+
   it('should truncate oversized codegraph_context output', async () => {
     const oversizedContext = Array.from({ length: 400 }, (_, i) => `line-${i} ${'x'.repeat(80)}`).join('\n');
     const fakeCg = {
