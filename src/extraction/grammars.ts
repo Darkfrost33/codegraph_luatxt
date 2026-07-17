@@ -120,6 +120,9 @@ export const EXTENSION_MAP: Record<string, Language> = {
   '.scala': 'scala',
   '.sc': 'scala',
   '.lua': 'lua',
+  // Unity / some engines ship Lua as `*.lua.txt` so the asset pipeline treats
+  // them as text. Compound suffix must win over a bare `.txt` override.
+  '.lua.txt': 'lua',
   '.luau': 'luau',
   '.m': 'objc',
   '.mm': 'objc',
@@ -172,6 +175,27 @@ export const EXTENSION_MAP: Record<string, Language> = {
   '.tofu': 'terraform',
 };
 
+/** Built-in extensions longest-first so `.lua.txt` wins over a bare `.txt`. */
+const BUILTIN_EXTENSIONS = Object.keys(EXTENSION_MAP).sort((a, b) => b.length - a.length);
+
+/**
+ * Longest suffix of `filePath` that is a known extension (built-in or override).
+ * Last-dot matching would treat `foo.lua.txt` as `.txt` and miss compound forms.
+ */
+function getSupportedExtension(
+  filePath: string,
+  overrides?: Record<string, Language>,
+): string | null {
+  const lowerPath = filePath.toLowerCase();
+  const exts =
+    overrides && Object.keys(overrides).length > 0
+      ? [...new Set([...Object.keys(overrides), ...Object.keys(EXTENSION_MAP)])].sort(
+          (a, b) => b.length - a.length,
+        )
+      : BUILTIN_EXTENSIONS;
+  return exts.find((ext) => lowerPath.endsWith(ext)) ?? null;
+}
+
 /**
  * Whether a file is one CodeGraph can parse, based purely on its extension.
  * This is the single source of truth for "should we index this file" — derived
@@ -185,10 +209,7 @@ export function isSourceFile(filePath: string, overrides?: Record<string, Langua
   if (isPlayRoutesFile(filePath)) return true; // Play `conf/routes` is extensionless
   if (isShopifyLiquidJson(filePath)) return true; // Shopify OS 2.0 JSON templates / section groups
   if (isErlangAppFile(filePath)) return true; // OTP `.app`/`.app.src` resource files
-  const dot = filePath.lastIndexOf('.');
-  if (dot < 0) return false;
-  const ext = filePath.slice(dot).toLowerCase();
-  return ext in EXTENSION_MAP || (!!overrides && ext in overrides);
+  return getSupportedExtension(filePath, overrides) !== null;
 }
 
 /**
@@ -437,14 +458,15 @@ export function detectLanguage(filePath: string, source?: string, overrides?: Re
   // Play `conf/routes` has no grammar — route through the no-symbol path; the
   // Play framework resolver extracts route nodes from it.
   if (isPlayRoutesFile(filePath)) return 'yaml';
-  const ext = filePath.substring(filePath.lastIndexOf('.')).toLowerCase();
   // Shopify OS 2.0 JSON templates / section groups → the Liquid extractor (it
   // links each section `"type"` to its `sections/<type>.liquid`).
   if (isShopifyLiquidJson(filePath)) return 'liquid';
   // OTP `.app`/`.app.src` resource files — Erlang terms the grammar parses as
   // top-level expressions (last-dot ext `.src` is too generic for the map).
   if (isErlangAppFile(filePath)) return 'erlang';
-  const lang = (overrides && overrides[ext]) || EXTENSION_MAP[ext] || 'unknown';
+  const ext = getSupportedExtension(filePath, overrides);
+  const lang =
+    (ext && overrides && overrides[ext]) || (ext ? EXTENSION_MAP[ext] : undefined) || 'unknown';
 
   // .h files could be C, C++, or Objective-C — check source content
   if (lang === 'c' && ext === '.h' && source) {

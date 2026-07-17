@@ -8106,6 +8106,7 @@ describe('Lua Extraction', () => {
     it('should detect Lua files', () => {
       expect(detectLanguage('init.lua')).toBe('lua');
       expect(detectLanguage('src/util.lua')).toBe('lua');
+      expect(detectLanguage('src/util.lua.txt')).toBe('lua');
     });
 
     it('should report Lua as supported', () => {
