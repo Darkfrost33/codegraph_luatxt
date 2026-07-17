@@ -510,6 +510,7 @@ describe('Source file detection (isSourceFile)', () => {
     expect(isSourceFile('lib/util.js')).toBe(true);
     expect(isSourceFile('src/main.py')).toBe(true);
     expect(isSourceFile('src/init.lua.txt')).toBe(true);
+    expect(isSourceFile('Mods/Foo/Bar.tl')).toBe(true);
   });
 
   it('rejects unsupported extensions and extensionless files', () => {

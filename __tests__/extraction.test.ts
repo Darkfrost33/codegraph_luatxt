@@ -8276,6 +8276,67 @@ local count = 0
 });
 
 // =============================================================================
+// Teal
+// =============================================================================
+
+describe('Teal Extraction', () => {
+  describe('Language detection', () => {
+    it('should detect Teal files', () => {
+      expect(detectLanguage('init.tl')).toBe('teal');
+      expect(detectLanguage('Mods/Foo/Bar.tl')).toBe('teal');
+      expect(detectLanguage('Built-in/GlobalEnvDef.d.tl')).toBe('teal');
+    });
+
+    it('should report Teal as supported', () => {
+      expect(isLanguageSupported('teal')).toBe(true);
+      expect(getSupportedLanguages()).toContain('teal');
+    });
+  });
+
+  describe('Function / record / interface extraction', () => {
+    it('should extract functions, interfaces, records, and require imports', () => {
+      const code = `
+local Core = require("TCore:Presentation")
+
+global interface ServerTimeData
+    is_initialized: boolean
+    server_time: integer
+end
+
+local record Clock
+    __index: Clock
+end
+
+local function GetServerTime(): integer | nil
+    return nil
+end
+
+function Clock.New(): Clock
+    return setmetatable({} as Clock, Clock as metatable<Clock>)
+end
+
+function Clock:Tick()
+    return GetServerTime()
+end
+
+return Clock
+`;
+      const result = extractFromSource('Clock.tl', code);
+      expect(result.nodes.find((n) => n.name === 'GetServerTime')?.kind).toBe('function');
+      expect(result.nodes.find((n) => n.name === 'ServerTimeData')?.kind).toBe('interface');
+      expect(result.nodes.find((n) => n.name === 'Clock' && n.kind === 'class')).toBeTruthy();
+      const newMethod = result.nodes.find((n) => n.kind === 'method' && n.name === 'New');
+      expect(newMethod?.qualifiedName).toBe('Clock::New');
+      const tick = result.nodes.find((n) => n.kind === 'method' && n.name === 'Tick');
+      expect(tick?.qualifiedName).toBe('Clock::Tick');
+      const imports = result.nodes.filter((n) => n.kind === 'import').map((n) => n.name);
+      expect(imports).toContain('TCore:Presentation');
+      expect(result.nodes.find((n) => n.name === 'GetServerTime')?.language).toBe('teal');
+    });
+  });
+});
+
+// =============================================================================
 // Objective-C
 // =============================================================================
 

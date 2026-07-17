@@ -2792,6 +2792,25 @@ export class TreeSitterExtractor {
         const initSignature = initValue ? `= ${initValue}${initValue.length >= 100 ? '...' : ''}` : undefined;
         this.createNode(kind, name, nameNode, { docstring, signature: initSignature, isExported });
       });
+    } else if (this.language === 'teal') {
+      // Teal: var_declaration → var_declarators → var (name: identifier),
+      //      initializers: expressions. Same multi-name shape as Lua locals.
+      const declarators = getChildByField(node, 'declarators');
+      const inits = getChildByField(node, 'initializers');
+      const values = inits ? inits.namedChildren : [];
+      const vars = declarators
+        ? declarators.namedChildren.filter((c) => c.type === 'var')
+        : [];
+      vars.forEach((varNode, i) => {
+        const nameNode = getChildByField(varNode, 'name') ?? varNode.namedChild(0);
+        if (!nameNode || nameNode.type !== 'identifier') return;
+        const name = getNodeText(nameNode, this.source);
+        if (!name) return;
+        const valueNode = values[i];
+        const initValue = valueNode ? getNodeText(valueNode, this.source).slice(0, 100) : undefined;
+        const initSignature = initValue ? `= ${initValue}${initValue.length >= 100 ? '...' : ''}` : undefined;
+        this.createNode(kind, name, nameNode, { docstring, signature: initSignature, isExported });
+      });
     } else if (this.language === 'c') {
       // C: a `declaration` node's name nests inside the `declarator` field —
       // `init_declarator` (with value) or bare/pointer/array declarators (no
@@ -3884,6 +3903,53 @@ export class TreeSitterExtractor {
           fromNodeId: callerId,
           referenceName: erlAtom(recordAtom),
           referenceKind: 'references',
+          line,
+          column,
+        });
+      }
+      return;
+    }
+
+    // Teal: function_call uses `called_object` (not `function`/`name`). Callee
+    // may be a bare identifier, `index` (`a.b`), or `method_index` (`a:b`).
+    if (this.language === 'teal' && node.type === 'function_call') {
+      const callee = getChildByField(node, 'called_object');
+      if (!callee) return;
+      const line = node.startPosition.row + 1;
+      const column = node.startPosition.column;
+      let calleeName = '';
+      if (callee.type === 'identifier') {
+        calleeName = getNodeText(callee, this.source);
+      } else if (callee.type === 'index' || callee.type === 'method_index') {
+        // Prefer trailing field/key as the method name; qualify with a simple
+        // identifier receiver when present so local type-inference can help.
+        const key =
+          getChildByField(callee, 'key') ??
+          getChildByField(callee, 'entry') ??
+          callee.namedChild(callee.namedChildCount - 1);
+        const methodName = key ? getNodeText(key, this.source) : '';
+        if (!methodName) return;
+        const recv =
+          getChildByField(callee, 'base') ??
+          getChildByField(callee, 'object') ??
+          callee.namedChild(0);
+        if (recv && recv.type === 'identifier' && recv !== key) {
+          // Preserve Teal's colon for method_index (`self:Foo`) so the Lua-style
+          // receiver-type matcher can resolve it; dots for table index (`a.b`).
+          const sep = callee.type === 'method_index' ? ':' : '.';
+          calleeName = `${getNodeText(recv, this.source)}${sep}${methodName}`;
+        } else {
+          calleeName = methodName;
+        }
+      } else {
+        // Nested call/cast receivers — no static name worth linking.
+        return;
+      }
+      if (calleeName) {
+        this.unresolvedReferences.push({
+          fromNodeId: callerId,
+          referenceName: calleeName,
+          referenceKind: 'calls',
           line,
           column,
         });

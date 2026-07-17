@@ -26,6 +26,7 @@ import { scalaExtractor } from './scala';
 import { luaExtractor } from './lua';
 import { rExtractor } from './r';
 import { luauExtractor } from './luau';
+import { tealExtractor } from './teal';
 import { objcExtractor } from './objc';
 import { cfscriptExtractor } from './cfscript';
 import { cfqueryExtractor } from './cfquery';
@@ -59,6 +60,7 @@ export const EXTRACTORS: Partial<Record<Language, LanguageExtractor>> = {
   lua: luaExtractor,
   r: rExtractor,
   luau: luauExtractor,
+  teal: tealExtractor,
   objc: objcExtractor,
   cfscript: cfscriptExtractor,
   cfquery: cfqueryExtractor,

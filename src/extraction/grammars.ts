@@ -39,6 +39,7 @@ const WASM_GRAMMAR_FILES: Record<GrammarLanguage, string> = {
   lua: 'tree-sitter-lua.wasm',
   r: 'tree-sitter-r.wasm',
   luau: 'tree-sitter-luau.wasm',
+  teal: 'tree-sitter-teal.wasm',
   objc: 'tree-sitter-objc.wasm',
   cfml: 'tree-sitter-cfml.wasm',
   cfscript: 'tree-sitter-cfscript.wasm',
@@ -124,6 +125,9 @@ export const EXTENSION_MAP: Record<string, Language> = {
   // them as text. Compound suffix must win over a bare `.txt` override.
   '.lua.txt': 'lua',
   '.luau': 'luau',
+  // Teal (typed Lua dialect) — `.tl` and declaration files `.d.tl` (matched via
+  // longest-suffix `.tl`). Grammar: euclidianAce/tree-sitter-teal ABI 15.
+  '.tl': 'teal',
   '.m': 'objc',
   '.mm': 'objc',
   '.sol': 'solidity',
@@ -310,7 +314,7 @@ export async function initGrammars(): Promise<void> {
  * the vendored wasm together.
  */
 const VENDORED_WASM_LANGS: ReadonlySet<GrammarLanguage> = new Set([
-  'pascal', 'scala', 'lua', 'luau', 'csharp', 'r', 'cfml', 'cfscript', 'cfquery',
+  'pascal', 'scala', 'lua', 'luau', 'teal', 'csharp', 'r', 'cfml', 'cfscript', 'cfquery',
   'cobol', 'vbnet', 'erlang', 'terraform', 'arkts', 'nix',
   'typescript', 'tsx', 'javascript', 'jsx', 'java', 'python', 'go',
   // R7a (C/C++ kernel port prep): tree-sitter-c v0.24.2 (b780e47) +
@@ -621,6 +625,7 @@ export function getLanguageDisplayName(language: Language): string {
     scala: 'Scala',
     lua: 'Lua',
     luau: 'Luau',
+    teal: 'Teal',
     objc: 'Objective-C',
     solidity: 'Solidity',
     nix: 'Nix',

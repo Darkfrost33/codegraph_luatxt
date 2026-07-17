@@ -1452,7 +1452,7 @@ export function resolveViaImport(
   // `require(script.Parent.Signal)`) — map it to a module file. There's no static
   // import statement, so the generic path-matcher can't bridge the dot↔slash /
   // leaf↔basename gap; resolve it explicitly to the module file.
-  if ((ref.language === 'lua' || ref.language === 'luau') && ref.referenceKind === 'imports') {
+  if ((ref.language === 'lua' || ref.language === 'luau' || ref.language === 'teal') && ref.referenceKind === 'imports') {
     const luaResult = resolveLuaRequire(ref, context);
     if (luaResult) return luaResult;
   }
@@ -1646,7 +1646,15 @@ function resolveLuaRequire(ref: UnresolvedRef, context: ResolutionContext): Reso
   const name = ref.referenceName;
   if (!name) return null;
   const base = name.includes('.') ? name.replace(/\./g, '/') : name;
-  const suffixes = [`${base}.lua`, `${base}.luau`, `${base}/init.lua`, `${base}/init.luau`];
+  const suffixes = [
+    `${base}.lua`,
+    `${base}.luau`,
+    `${base}.tl`,
+    `${base}.lua.txt`,
+    `${base}/init.lua`,
+    `${base}/init.luau`,
+    `${base}/init.tl`,
+  ];
   const files = context.getAllFiles();
   const shared = (a: string, b: string): number => {
     let i = 0;

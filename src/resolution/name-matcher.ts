@@ -1217,10 +1217,11 @@ export function localReceiverTypePatterns(language: Language, r: string): RegExp
       ];
     case 'lua':
     case 'luau':
+    case 'teal':
       return [
         new RegExp(`\\b${r}\\b\\s*=\\s*([A-Z][\\w]*)\\.new\\b`), // local lg = Logger.new()
         new RegExp(`\\b${r}\\b\\s*=\\s*([A-Z][\\w]*)\\s*\\(`), // local lg = Logger(...)  (callable table)
-        // Luau annotation (`local lg: Logger`) / typed param — but Lua's
+        // Luau/Teal annotation (`local lg: Logger`) / typed param — but Lua's
         // method-call syntax is the IDENTICAL `receiver:Name` shape, and the
         // backward scan starts on the call's own line, so without a gate any
         // PascalCase method call (`lg:Log()`, the Roblox convention)
@@ -1515,7 +1516,7 @@ export function matchMethodCall(
   // Recognize these receiver/method separators so local-variable receiver-type
   // inference (#1108) applies to them too — extraction already emits the ref in
   // this shape, but the resolver otherwise only understood `.` and `::`.
-  const luaColonMatch = (ref.language === 'lua' || ref.language === 'luau')
+  const luaColonMatch = (ref.language === 'lua' || ref.language === 'luau' || ref.language === 'teal')
     ? ref.referenceName.match(/^([\w.]+):(\w+)$/)
     : null;
   const rDollarMatch = ref.language === 'r'
