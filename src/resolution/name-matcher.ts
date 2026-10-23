@@ -166,7 +166,7 @@ export function sameLanguageFamily(a: string, b: string): boolean {
 const CODE_FAMILY: Record<string, string> = {
   ...LANGUAGE_FAMILY,
   python: 'python', go: 'go', rust: 'rust', php: 'php', ruby: 'ruby', dart: 'dart',
-  lua: 'lua', luau: 'lua', r: 'r', erlang: 'erlang', pascal: 'pascal', solidity: 'solidity',
+  lua: 'lua', luau: 'lua', teal: 'lua', r: 'r', erlang: 'erlang', pascal: 'pascal', solidity: 'solidity',
   nix: 'nix', cobol: 'cobol',
 };
 
@@ -1183,7 +1183,7 @@ function localDeclarationScope(candidate: Node, context: ResolutionContext): { s
   const hit = memo.get(candidate.id);
   if (hit !== undefined) return hit;
   let scope: { start: number; end: number } | null = null;
-  if (!((candidate.language === 'lua' || candidate.language === 'luau') && !isLuaLocal(candidate, context))) {
+  if (!(isLuaDialect(candidate.language) && !isLuaLocal(candidate, context))) {
     for (const n of context.getNodesInFile(candidate.filePath)) {
       if ((n.kind !== 'function' && n.kind !== 'method') || n.id === candidate.id) continue;
       if (n.startLine > candidate.startLine || n.endLine < candidate.startLine || n.startLine === n.endLine) continue;
@@ -1442,6 +1442,16 @@ function isUnexportedModuleBinding(candidate: Node, context: ResolutionContext):
 const LUA_LOCALS = new WeakMap<ResolutionContext, Map<string, boolean>>();
 
 /** Whether a Lua variable or function is declared `local` (`local x = …`, `local function f`, `local a, x = …`). */
+/** Lua, Luau, and Teal share chunk scoping, `require`, and `obj:method` calls. */
+function isLuaDialect(language: string): boolean {
+  return language === 'lua' || language === 'luau' || language === 'teal';
+}
+
+/** Same language, or two of the Lua dialects, which call across each other. */
+function sameLuaDialect(a: string, b: string): boolean {
+  return a === b || (isLuaDialect(a) && isLuaDialect(b));
+}
+
 function isLuaLocal(candidate: Node, context: ResolutionContext): boolean {
   if (candidate.kind !== 'variable' && candidate.kind !== 'constant' && candidate.kind !== 'function') return false;
   let memo = LUA_LOCALS.get(context);
@@ -1624,7 +1634,7 @@ function luaAliasExpr(rhs: string, site: LuaSite, context: ResolutionContext, de
     const member = path[path.length - 1]!;
     const holder = path.length > 1 ? path[path.length - 2]! : root;
     const owned = context.getNodesByName(member).filter((n) =>
-      (n.language === 'lua' || n.language === 'luau') && n.kind === 'method' && sharesReceiverWord(holder, n) &&
+      isLuaDialect(n.language) && n.kind === 'method' && sharesReceiverWord(holder, n) &&
       !(isTestPath(n.filePath) && !isTestPath(site.file)));
     return owned.length === 1 ? owned[0]! : undefined;
   }
@@ -2153,7 +2163,7 @@ export function isVisibleAcrossFiles(candidate: Node, ref: UnresolvedRef, contex
   // took busted's `it(…)` in every other spec file, 4,166 times. Its module
   // can still hand it out — `return { check = check_phase }` — to a file that
   // names it through a `require` alias.
-  if ((lang === 'lua' || lang === 'luau') && isLuaLocal(candidate, context)) {
+  if (isLuaDialect(lang) && isLuaLocal(candidate, context)) {
     return ref.referenceKind === 'calls' && /^[A-Za-z_]\w*$/.test(ref.referenceName) &&
       luaAliasTarget(ref, context)?.targetNodeId === candidate.id;
   }
@@ -5392,7 +5402,7 @@ export function matchByExactName(
   const bareNoMembers = isBareGoCall(ref, context) || isBareRCall(ref, context);
   const solidityBare = isReceiverLessSolidityCall(ref, context);
   const barePhp = isBarePhpCall(ref, context);
-  const luaBareCall = (ref.language === 'lua' || ref.language === 'luau') && ref.referenceKind === 'calls' && /^[A-Za-z_]\w*$/.test(ref.referenceName);
+  const luaBareCall = isLuaDialect(ref.language) && ref.referenceKind === 'calls' && /^[A-Za-z_]\w*$/.test(ref.referenceName);
   // A type, a value or an import the file binds from a package outside the
   // repository names nothing in it, whatever kind of reference it is.
   if (!bareJs && JS_FAMILY.has(ref.language) && ref.referenceKind !== 'calls' &&
@@ -6804,6 +6814,7 @@ function buildLocalReceiverTypePatterns(language: Language, r: string): RegExp[]
       ];
     case 'lua':
     case 'luau':
+    case 'teal':
       return [
         new RegExp(`\\b${r}\\b\\s*=\\s*([A-Z][\\w]*)\\.new\\b`), // local lg = Logger.new()
         new RegExp(`\\b${r}\\b\\s*=\\s*([A-Z][\\w]*)\\s*\\(`), // local lg = Logger(...)  (callable table)
@@ -7654,7 +7665,7 @@ export function matchMethodCall(
   // Recognize these receiver/method separators so local-variable receiver-type
   // inference (#1108) applies to them too — extraction already emits the ref in
   // this shape, but the resolver otherwise only understood `.` and `::`.
-  const luaColonMatch = (ref.language === 'lua' || ref.language === 'luau')
+  const luaColonMatch = isLuaDialect(ref.language)
     ? ref.referenceName.match(/^([\w.]+):(\w+)$/)
     : null;
   const rDollarMatch = ref.language === 'r'
@@ -7921,8 +7932,8 @@ export function matchMethodCall(
     }
 
     for (const classNode of classCandidates) {
-      // Skip cross-language class matches
-      if (classNode.language !== ref.language) continue;
+      // Skip cross-language class matches. Lua, Luau and Teal call each other.
+      if (!sameLuaDialect(classNode.language, ref.language)) continue;
 
       const nodesInFile = context.getNodesInFile(classNode.filePath);
       const methodNode = nodesInFile.find(
@@ -7943,7 +7954,7 @@ export function matchMethodCall(
     }
     // A class method the named class inherits — Horse's `THorse.Get(…)` is
     // THorseCore's, three `class(…)` heads up — before any guess by name.
-    const inherited = inheritedClassMethod(classCandidates.filter((c) => c.language === ref.language), methodName!, context);
+    const inherited = inheritedClassMethod(classCandidates.filter((c) => sameLuaDialect(c.language, ref.language)), methodName!, context);
     if (inherited) return { original: ref, targetNodeId: inherited.id, confidence: 0.8, resolvedBy: 'qualified-name' };
     return null;
   });
@@ -8007,8 +8018,8 @@ export function matchMethodCall(
         ref.filePath,
       );
       for (const classNode of fuzzyClassCandidates) {
-        // Skip cross-language class matches
-        if (classNode.language !== ref.language) continue;
+        // Skip cross-language class matches. Lua, Luau and Teal call each other.
+        if (!sameLuaDialect(classNode.language, ref.language)) continue;
 
         const nodesInFile = context.getNodesInFile(classNode.filePath);
         const methodNode = nodesInFile.find(
@@ -8051,9 +8062,17 @@ export function matchMethodCall(
       (n) => n.kind === 'method' && n.name === methodName
     );
 
-    // Filter to same-language candidates first
+    // Same language first. A Lua call with no Lua method of that name may still
+    // be the one Teal or Luau method (and the other way around).
     const sameLanguageMethods = methods.filter(m => m.language === ref.language);
-    let targetMethods = sameLanguageMethods.length > 0 ? sameLanguageMethods : methods;
+    const luaFamilyMethods = sameLanguageMethods.length > 0 || !isLuaDialect(ref.language)
+      ? []
+      : methods.filter(m => isLuaDialect(m.language));
+    let targetMethods = sameLanguageMethods.length > 0
+      ? sameLanguageMethods
+      : luaFamilyMethods.length > 0
+        ? luaFamilyMethods
+        : methods;
     // A receiver the file imports is another module's value: never a method
     // declared in the calling file. expo-camera's `CameraManager.isAvailableAsync()`
     // (`import CameraManager from './ExpoCameraManager'`) went to `CameraView`'s
@@ -8102,12 +8121,12 @@ export function matchMethodCall(
     // (`web_push_request.legacy_encrypt` → WebPushRequest). rubocop's
     // `node.loc` on a rubocop-ast node went to the one `loc` in the project
     // 1,201 times; lobsters' `value.to_s` to a short-id class's.
-    if (targetMethods.length === 1 && !narrowed && targetMethods[0]!.language === ref.language &&
+    if (targetMethods.length === 1 && !narrowed && sameLuaDialect(targetMethods[0]!.language, ref.language) &&
         // A test double is only what a test names — as in the scoring below:
         // allauth's `resp.json()` on a Django test response is not the one
         // `json` of its `MockedResponse`.
         !isUnnamedTestDouble(targetMethods[0]!, objectOrClass!, ref, context) &&
-        !((ref.language === 'lua' || ref.language === 'luau') && isLuaLibraryCall(objectOrClass!, methodName!, ref, targetMethods[0]!)) &&
+        !(isLuaDialect(ref.language) && isLuaLibraryCall(objectOrClass!, methodName!, ref, targetMethods[0]!)) &&
         // Rust / Go / Kotlin / C#: a standard-library method name on an
         // untyped receiver (`sym.map(…)`, `w.Header().Get(…)`,
         // `reader.Value.ToString()`) is the library type's.
@@ -9637,7 +9656,7 @@ function matchReferenceInner(
   }
 
   // A bare Lua call through a `local` alias reaches what the alias names.
-  if ((ref.language === 'lua' || ref.language === 'luau') && ref.referenceKind === 'calls' && /^[A-Za-z_]\w*$/.test(ref.referenceName)) {
+  if (isLuaDialect(ref.language) && ref.referenceKind === 'calls' && /^[A-Za-z_]\w*$/.test(ref.referenceName)) {
     const aliased = luaAliasTarget(ref, context);
     if (aliased !== undefined) return aliased;
     // `ipairs(t)` is Lua's, unless the file defines its own: telescope's 122

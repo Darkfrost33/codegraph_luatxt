@@ -1805,7 +1805,7 @@ export function resolveViaImport(
   // `require(script.Parent.Signal)`) — map it to a module file. There's no static
   // import statement, so the generic path-matcher can't bridge the dot↔slash /
   // leaf↔basename gap; resolve it explicitly to the module file.
-  if ((ref.language === 'lua' || ref.language === 'luau') && ref.referenceKind === 'imports') {
+  if ((ref.language === 'lua' || ref.language === 'luau' || ref.language === 'teal') && ref.referenceKind === 'imports') {
     const luaResult = resolveLuaRequire(ref, context);
     if (luaResult) return luaResult;
   }
@@ -2030,7 +2030,7 @@ function resolvePythonModuleMember(
  * Resolve a Lua/Luau `require(...)` to its module file. The reference name is
  * either a dotted module path (`telescope.config` → `telescope/config.lua`) or a
  * Roblox instance-path leaf (`Signal` from `require(script.Parent.Signal)` →
- * `Signal.luau`). We try `<path>.lua|.luau` and `<path>/init.lua|.luau`, matched
+ * `Signal.luau`). We try `<path>.lua|.luau|.tl|.lua.txt` and `<path>/init.lua|.luau|.tl`, matched
  * by path suffix (the module root — `lua/`, `src/`, … — is project-specific).
  * Among suffix matches, the one sharing the longest directory prefix with the
  * requiring file wins (instance-path requires resolve within the same package).
@@ -2039,7 +2039,15 @@ function resolveLuaRequire(ref: UnresolvedRef, context: ResolutionContext): Reso
   const name = ref.referenceName;
   if (!name) return null;
   const base = name.includes('.') ? name.replace(/\./g, '/') : name;
-  const suffixes = [`${base}.lua`, `${base}.luau`, `${base}/init.lua`, `${base}/init.luau`];
+  const suffixes = [
+    `${base}.lua`,
+    `${base}.luau`,
+    `${base}.tl`,
+    `${base}.lua.txt`,
+    `${base}/init.lua`,
+    `${base}/init.luau`,
+    `${base}/init.tl`,
+  ];
   const byBasename = luaBasenameIndex(context);
   const shared = (a: string, b: string): number => {
     let i = 0;

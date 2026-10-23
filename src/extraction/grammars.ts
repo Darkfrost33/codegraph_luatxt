@@ -39,6 +39,7 @@ const WASM_GRAMMAR_FILES: Record<GrammarLanguage, string> = {
   lua: 'tree-sitter-lua.wasm',
   r: 'tree-sitter-r.wasm',
   luau: 'tree-sitter-luau.wasm',
+  teal: 'tree-sitter-teal.wasm',
   objc: 'tree-sitter-objc.wasm',
   cfml: 'tree-sitter-cfml.wasm',
   cfscript: 'tree-sitter-cfscript.wasm',
@@ -120,7 +121,12 @@ export const EXTENSION_MAP: Record<string, Language> = {
   '.scala': 'scala',
   '.sc': 'scala',
   '.lua': 'lua',
+  // Unity and some engines ship Lua as `*.lua.txt` so the asset pipeline treats
+  // them as text. The compound suffix must win over a bare `.txt` override.
+  '.lua.txt': 'lua',
   '.luau': 'luau',
+  // Teal (typed Lua). `.d.tl` declaration files match via the `.tl` suffix.
+  '.tl': 'teal',
   '.m': 'objc',
   '.mm': 'objc',
   '.sol': 'solidity',
@@ -171,6 +177,27 @@ export const EXTENSION_MAP: Record<string, Language> = {
   '.tfvars': 'terraform',
   '.tofu': 'terraform',
 };
+
+/** Built-in extensions, longest first, so `.lua.txt` wins over a bare `.txt`. */
+const BUILTIN_EXTENSIONS = Object.keys(EXTENSION_MAP).sort((a, b) => b.length - a.length);
+
+/**
+ * Longest suffix of `filePath` that is a known extension (built-in or override).
+ * Last-dot matching would treat `foo.lua.txt` as `.txt` and miss the compound form.
+ */
+function getSupportedExtension(
+  filePath: string,
+  overrides?: Record<string, Language>,
+): string | null {
+  const lowerPath = filePath.toLowerCase();
+  const exts =
+    overrides && Object.keys(overrides).length > 0
+      ? [...new Set([...Object.keys(overrides), ...Object.keys(EXTENSION_MAP)])].sort(
+          (a, b) => b.length - a.length,
+        )
+      : BUILTIN_EXTENSIONS;
+  return exts.find((ext) => lowerPath.endsWith(ext)) ?? null;
+}
 
 /** MPEG transport stream: fixed 188-byte packets, each opening with 0x47. */
 const MPEG_TS_PACKET_SIZE = 188;
@@ -246,10 +273,7 @@ export function isSourceFile(filePath: string, overrides?: Record<string, Langua
   if (isPlayRoutesFile(filePath)) return true; // Play `conf/routes` is extensionless
   if (isShopifyLiquidJson(filePath)) return true; // Shopify OS 2.0 JSON templates / section groups
   if (isErlangAppFile(filePath)) return true; // OTP `.app`/`.app.src` resource files
-  const dot = filePath.lastIndexOf('.');
-  if (dot < 0) return false;
-  const ext = filePath.slice(dot).toLowerCase();
-  return ext in EXTENSION_MAP || (!!overrides && ext in overrides);
+  return getSupportedExtension(filePath, overrides) !== null;
 }
 
 /**
@@ -350,7 +374,7 @@ export async function initGrammars(): Promise<void> {
  * the vendored wasm together.
  */
 const VENDORED_WASM_LANGS: ReadonlySet<GrammarLanguage> = new Set([
-  'pascal', 'scala', 'lua', 'luau', 'csharp', 'r', 'cfml', 'cfscript', 'cfquery',
+  'pascal', 'scala', 'lua', 'luau', 'teal', 'csharp', 'r', 'cfml', 'cfscript', 'cfquery',
   'cobol', 'vbnet', 'erlang', 'terraform', 'arkts', 'nix',
   'typescript', 'tsx', 'javascript', 'jsx', 'java', 'python', 'go',
   // R7a (C/C++ kernel port prep): tree-sitter-c v0.24.2 (b780e47) +
@@ -541,14 +565,15 @@ export function detectLanguage(filePath: string, source?: string, overrides?: Re
   // Play `conf/routes` has no grammar — route through the no-symbol path; the
   // Play framework resolver extracts route nodes from it.
   if (isPlayRoutesFile(filePath)) return 'yaml';
-  const ext = filePath.substring(filePath.lastIndexOf('.')).toLowerCase();
+  const ext = getSupportedExtension(filePath, overrides);
   // Shopify OS 2.0 JSON templates / section groups → the Liquid extractor (it
   // links each section `"type"` to its `sections/<type>.liquid`).
   if (isShopifyLiquidJson(filePath)) return 'liquid';
   // OTP `.app`/`.app.src` resource files — Erlang terms the grammar parses as
   // top-level expressions (last-dot ext `.src` is too generic for the map).
   if (isErlangAppFile(filePath)) return 'erlang';
-  const lang = (overrides && overrides[ext]) || EXTENSION_MAP[ext] || 'unknown';
+  const lang =
+    (ext && overrides && overrides[ext]) || (ext ? EXTENSION_MAP[ext] : undefined) || 'unknown';
 
   // A Flow-typed `.js` (`// @flow` in its leading comments) parses as TSX:
   // the JavaScript grammar can't read its annotations — `render(): React.Node`
@@ -859,6 +884,7 @@ export function getLanguageDisplayName(language: Language): string {
     scala: 'Scala',
     lua: 'Lua',
     luau: 'Luau',
+    teal: 'Teal',
     objc: 'Objective-C',
     solidity: 'Solidity',
     nix: 'Nix',

@@ -531,6 +531,8 @@ describe('Source file detection (isSourceFile)', () => {
     expect(isSourceFile('src/component.tsx')).toBe(true);
     expect(isSourceFile('lib/util.js')).toBe(true);
     expect(isSourceFile('src/main.py')).toBe(true);
+    expect(isSourceFile('src/init.lua.txt')).toBe(true);
+    expect(isSourceFile('Mods/Foo/Bar.tl')).toBe(true);
   });
 
   it('rejects unsupported extensions and extensionless files', () => {
@@ -538,6 +540,8 @@ describe('Source file detection (isSourceFile)', () => {
     expect(isSourceFile('README.md')).toBe(false);
     expect(isSourceFile('Makefile')).toBe(false);
     expect(isSourceFile('.gitignore')).toBe(false);
+    // Bare `.txt` is not Lua — only the compound `.lua.txt` suffix is.
+    expect(isSourceFile('notes.txt')).toBe(false);
   });
 
   it('matches regardless of leading dot directories', () => {

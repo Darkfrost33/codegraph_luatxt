@@ -3142,6 +3142,25 @@ export class TreeSitterExtractor {
         const initSignature = initValue ? `= ${initValue}${initValue.length >= 100 ? '...' : ''}` : undefined;
         this.createNode(kind, target.name, nameNode, { docstring, signature: initSignature, isExported });
       });
+    } else if (this.language === 'teal') {
+      // Teal: var_declaration → var_declarators → var (name: identifier),
+      // initializers: expressions. Same multi-name shape as Lua locals.
+      const declarators = getChildByField(node, 'declarators');
+      const inits = getChildByField(node, 'initializers');
+      const values = inits ? inits.namedChildren : [];
+      const vars = declarators
+        ? declarators.namedChildren.filter((c) => c.type === 'var')
+        : [];
+      vars.forEach((varNode, i) => {
+        const nameNode = getChildByField(varNode, 'name') ?? varNode.namedChild(0);
+        if (!nameNode || nameNode.type !== 'identifier') return;
+        const name = getNodeText(nameNode, this.source);
+        if (!name) return;
+        const valueNode = values[i];
+        const initValue = valueNode ? getNodeText(valueNode, this.source).slice(0, 100) : undefined;
+        const initSignature = initValue ? `= ${initValue}${initValue.length >= 100 ? '...' : ''}` : undefined;
+        this.createNode(kind, name, nameNode, { docstring, signature: initSignature, isExported });
+      });
     } else if (this.language === 'c') {
       // C: a `declaration` node's name nests inside the `declarator` field —
       // `init_declarator` (with value) or bare/pointer/array declarators (no
@@ -4143,6 +4162,56 @@ export class TreeSitterExtractor {
 
     const callerId = this.nodeStack[this.nodeStack.length - 1];
     if (!callerId) return;
+
+    // Teal: function_call uses `called_object` (not `function`/`name`). The callee
+    // may be a bare identifier, `index` (`a.b`), or `method_index` (`a:b`).
+    if (this.language === 'teal' && node.type === 'function_call') {
+      const callee = getChildByField(node, 'called_object');
+      if (!callee) return;
+      const line = node.startPosition.row + 1;
+      const column = node.startPosition.column;
+      let calleeName = '';
+      if (callee.type === 'identifier') {
+        calleeName = getNodeText(callee, this.source);
+      } else if (callee.type === 'index' || callee.type === 'method_index') {
+        // The grammar tags BOTH the `.` / `:` token and the field identifier
+        // with the same field name. childForFieldName returns the token, whose
+        // text is "." — so take the named identifier.
+        let key: SyntaxNode | null = null;
+        for (let i = 0; i < callee.namedChildCount; i++) {
+          const field = callee.fieldNameForNamedChild(i);
+          const child = callee.namedChild(i);
+          if (child?.type === 'identifier' && (field === 'key' || field === 'method' || field === 'entry')) {
+            key = child;
+          }
+        }
+        key ??= callee.namedChildren.filter((c) => c.type === 'identifier').at(-1) ?? null;
+        const methodName = key ? getNodeText(key, this.source) : '';
+        if (!methodName) return;
+        const recv =
+          getChildByField(callee, 'base') ??
+          getChildByField(callee, 'object') ??
+          callee.namedChild(0);
+        if (recv && recv.type === 'identifier' && recv !== key) {
+          const sep = callee.type === 'method_index' ? ':' : '.';
+          calleeName = `${getNodeText(recv, this.source)}${sep}${methodName}`;
+        } else {
+          calleeName = methodName;
+        }
+      } else {
+        return;
+      }
+      if (calleeName) {
+        this.unresolvedReferences.push({
+          fromNodeId: callerId,
+          referenceName: calleeName,
+          referenceKind: 'calls',
+          line,
+          column,
+        });
+      }
+      return;
+    }
 
     // VB.NET: `foo(args)` is syntactically ambiguous between a call and an
     // index read, so the grammar parses non-empty parens as

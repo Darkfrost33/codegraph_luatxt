@@ -12,6 +12,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- Files named `*.lua.txt` (common in Unity and other engines that store Lua as text assets) are now indexed as Lua. Extension matching uses the longest known suffix, so the compound form is recognized instead of being treated as a plain `.txt` file.
+- CodeGraph now indexes **Teal** (`.tl`) — the typed dialect of Lua. Functions, records, interfaces, `require` imports, and call edges are extracted from Teal source so agents can work against the `.tl` you write rather than generated Lua.
 
 ## [1.6.2] - 2026-10-03
 
